@@ -109,12 +109,15 @@ def room(roomCode: str):
     ui.label(f'Room Code: {roomCode}').classes('text-2xl')
     gameArea = ui.column()
 
-    # Live readiness indicator (submissions vs players).
+    # Live readiness indicator (song submissions or guess submissions vs players).
     readyLabel = ui.label('0 / 0 Players Ready')
 
     def updateReadyLabel():
-        submittedCount = len(room_state['submissions'])
         playerCount = len(room_state['players'])
+        if room_state.get('gameState') == 'GUESSING':
+            submittedCount = len(room_state.get('guess_submissions', {}))
+        else:
+            submittedCount = len(room_state['submissions'])
 
         readyLabel.set_text(
             f'{submittedCount} / {playerCount} Players Ready'
@@ -124,6 +127,13 @@ def room(roomCode: str):
 
 
     playerColumn = ui.column()
+
+    def calculateScores():
+        for guesser_name, guesses in room_state['guesses'].items():
+            for actual_submitter, guessed_player in guesses.items():
+                if guessed_player == actual_submitter:
+                    room_state['scores'][guesser_name] += 1
+                    room_state['scores'][actual_submitter] += 1
 
     # Build all game-state areas once; visibility is toggled by refreshGameUI.
     with gameArea:
@@ -137,10 +147,7 @@ def room(roomCode: str):
                 refreshGameUI()
 
             if playerName == room_state['host']:
-                ui.button(
-                    'Start Game',
-                    on_click=startGame
-                )
+                ui.button('Start Game', on_click=startGame)
 
         # Song selection area: each player submits one song.
         songArea = ui.column()
@@ -174,6 +181,7 @@ def room(roomCode: str):
 
         # Guessing area: players guess which player submitted each song.
         guessingArea = ui.column()
+        guessSubmitArea = ui.column()
         last_guessing_signature = None
 
         def renderGuessingUI():
@@ -202,6 +210,50 @@ def room(roomCode: str):
                         lambda e, key=guess_key: player_guesses.__setitem__(key, e.value)
                     )
 
+        def submitGuesses():
+            room_state.setdefault('guess_submissions', {})
+            room_state['guess_submissions'][playerName] = True
+            updateReadyLabel()
+
+            if len(room_state['guess_submissions']) == len(room_state['players']):
+                calculateScores()
+                room_state['gameState'] = 'RESULTS'
+                refreshGameUI()
+
+        with guessSubmitArea:
+            ui.button('Submit Guesses', on_click=submitGuesses)
+
+        resultsArea = ui.column()
+
+        def renderResultsUI():
+            resultsArea.clear()
+            with resultsArea:
+                ui.label('Round Results').classes('text-2xl')
+                for submitter, song in room_state['submissions'].items():
+                    ui.label(f'{submitter} submitted: {song}')
+
+                ui.separator()
+                ui.label('Scores').classes('text-xl')
+
+                sorted_scores = sorted(
+                    room_state['scores'].items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+                for player, score in sorted_scores:
+                    ui.label(f'{player}: {score} points')
+
+                if playerName == room_state['host']:
+                    def nextRound():
+                        room_state['submissions'] = {}
+                        room_state['guesses'] = {}
+                        room_state['guess_submissions'] = {}
+                        room_state['gameState'] = 'SONG_SELECTION'
+                        updateReadyLabel()
+                        refreshGameUI()
+
+                    ui.button('Start Next Round', on_click=nextRound)
+
         def compute_guessing_signature():
             # Track only data that should trigger a UI rebuild.
             songs = tuple(sorted(room_state['submissions'].items()))
@@ -221,11 +273,18 @@ def room(roomCode: str):
         in_lobby = room_state['gameState'] == 'LOBBY'
         in_song_selection = room_state['gameState'] == 'SONG_SELECTION'
         in_guessing = room_state['gameState'] == 'GUESSING'
+        in_results = room_state['gameState'] == 'RESULTS'
         lobbyArea.set_visibility(in_lobby)
         songArea.set_visibility(in_song_selection)
         guessingArea.set_visibility(in_guessing)
+        guessSubmitArea.set_visibility(in_guessing)
+        resultsArea.set_visibility(in_results)
         if in_guessing:
+            room_state.setdefault('guess_submissions', {})
             refreshGuessingUIIfNeeded()
+            updateReadyLabel()
+        if in_results:
+            renderResultsUI()
 
     def refreshPlayers():
         # Re-render the player list so joins are reflected live.
