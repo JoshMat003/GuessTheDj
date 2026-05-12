@@ -108,6 +108,7 @@ def room(roomCode: str):
 
     ui.label(f'Room Code: {roomCode}').classes('text-2xl')
     gameArea = ui.column()
+    last_game_state = room_state.get('gameState', 'LOBBY')
 
     # Live readiness indicator (song submissions or guess submissions vs players).
     readyLabel = ui.label('0 / 0 Players Ready')
@@ -154,6 +155,7 @@ def room(roomCode: str):
         with songArea:
             ui.label('Submit a song')
             songInput = ui.input('Enter song name')
+            submitSongButton = None
 
             def submitSong():
                 song_name = (songInput.value or '').strip()
@@ -161,10 +163,16 @@ def room(roomCode: str):
                 if not song_name:
                     ui.notify('Please enter a song name')
                     return
+
+                if playerName in room_state['submissions']:
+                    ui.notify('You already submitted a song')
+                    return
                 
                 room_state['submissions'][playerName] = song_name
 
                 ui.notify('Song Submitted!')
+                submitSongButton.set_visibility(False)
+                songInput.set_visibility(False)
 
                 updateReadyLabel()
 
@@ -172,10 +180,20 @@ def room(roomCode: str):
                     room_state['gameState'] = 'GUESSING'
                     refreshGameUI()
 
-            ui.button(
+            submitSongButton = ui.button(
                 'Submit Song',
                 on_click=submitSong
             )
+
+        def refreshSongSubmitState(in_song_selection: bool, reset_input: bool = False):
+            already_submitted_song = playerName in room_state['submissions']
+            show_controls = in_song_selection and (not already_submitted_song)
+            submitSongButton.set_visibility(show_controls)
+            songInput.set_visibility(show_controls)
+            submitSongButton.set_enabled(show_controls)
+            songInput.set_enabled(show_controls)
+            if show_controls and reset_input:
+                songInput.set_value('')
 
 
 
@@ -189,13 +207,22 @@ def room(roomCode: str):
             with guessingArea:
                 ui.label('Guess who submitted each song')
 
-                songs = list(room_state['submissions'].items())
+                room_state['shuffled_songs'] = random.sample(
+                    list(room_state['submissions'].items()),
+                    len(room_state['submissions'])
+                )
+
+                songs = room_state['shuffled_songs']
                 if not songs:
                     ui.label('No songs submitted yet.')
                     return
 
                 player_guesses = room_state['guesses'].setdefault(playerName, {})
+                already_submitted = (
+                    playerName in room_state.get('guess_submissions', {})
+                )
                 player_options = [p['name'] for p in room_state['players']]
+                
 
                 for submitter, song_name in songs:
                     # Use submitter as stable key; song names can collide.
@@ -205,13 +232,25 @@ def room(roomCode: str):
                         label=f'Who submitted "{song_name}"?',
                         value=player_guesses.get(guess_key),
                     ).props('outlined standout').classes('w-64 bg-white text-black')
+                    if already_submitted:
+                        select.disable()
+                    else:
+                        select.on_value_change(
+                            lambda e, key=guess_key: player_guesses.__setitem__(key, e.value)
+                        )
 
-                    select.on_value_change(
-                        lambda e, key=guess_key: player_guesses.__setitem__(key, e.value)
-                    )
+                if already_submitted:
+                    ui.label('You already submitted your guesses for this round.')
 
         def submitGuesses():
             room_state.setdefault('guess_submissions', {})
+            already_submitted = (
+                playerName in room_state.get('guess_submissions', {})
+            )
+            if already_submitted:
+                ui.notify('You already submitted your guesses.')
+                return
+
             room_state['guess_submissions'][playerName] = True
             updateReadyLabel()
 
@@ -219,9 +258,17 @@ def room(roomCode: str):
                 calculateScores()
                 room_state['gameState'] = 'RESULTS'
                 refreshGameUI()
+            else:
+                refreshGameUI()
 
         with guessSubmitArea:
-            ui.button('Submit Guesses', on_click=submitGuesses)
+            submitGuessesButton = ui.button('Submit Guesses', on_click=submitGuesses)
+
+        def refreshGuessSubmitState():
+            already_submitted = (
+                playerName in room_state.get('guess_submissions', {})
+            )
+            submitGuessesButton.set_enabled(not already_submitted)
 
         resultsArea = ui.column()
 
@@ -269,11 +316,16 @@ def room(roomCode: str):
             renderGuessingUI()
 
     def refreshGameUI():
+        nonlocal last_game_state
         # Keep every client in sync with the current game phase.
         in_lobby = room_state['gameState'] == 'LOBBY'
         in_song_selection = room_state['gameState'] == 'SONG_SELECTION'
         in_guessing = room_state['gameState'] == 'GUESSING'
         in_results = room_state['gameState'] == 'RESULTS'
+        entered_song_selection = (
+            room_state['gameState'] == 'SONG_SELECTION'
+            and last_game_state != 'SONG_SELECTION'
+        )
         lobbyArea.set_visibility(in_lobby)
         songArea.set_visibility(in_song_selection)
         guessingArea.set_visibility(in_guessing)
@@ -282,7 +334,13 @@ def room(roomCode: str):
         if in_guessing:
             room_state.setdefault('guess_submissions', {})
             refreshGuessingUIIfNeeded()
+            refreshGuessSubmitState()
             updateReadyLabel()
+        refreshSongSubmitState(
+            in_song_selection,
+            reset_input=entered_song_selection,
+        )
+        last_game_state = room_state['gameState']
         if in_results:
             renderResultsUI()
 
