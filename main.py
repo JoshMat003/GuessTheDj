@@ -5,7 +5,8 @@ from prompts import prompts
 from spotify import ( 
     search_song,
     clear_playlist,
-    add_song_to_playlist
+    add_song_to_playlist,
+    SpotifyOAuth
 )
 
 def get_random_prompt():
@@ -95,8 +96,15 @@ def home():
 
     ui.button('Join Room', on_click=joinRoom)
 
+@ui.page('/callback')
+def spotify_callback(code: str = ''):
+    token_info = SpotifyOAuth.get_access_token(code)
 
-#Song Searching Functionality
+    if token_info:
+        ui.label('Spotify Connected Successfully!')
+    else:
+        ui.label('Failed to connect to Spotify.')
+
 
 
 @ui.page('/room/{roomCode}')

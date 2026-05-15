@@ -4,11 +4,11 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 load_dotenv()
-load_dotenv(dotenv_path='Secrets.env')
+load_dotenv(dotenv_path='secrets.env')
 
 client_id = (os.getenv('SPOTIFY_CLIENT_ID') or '').strip()
 client_secret = (os.getenv('SPOTIFY_CLIENT_SECRET') or '').strip()
-redirect_uri = (os.getenv('SPOTIFY_REDIRECT_URI') or 'https://guessthedj.onrender.com/callback').strip()
+redirect_uri = (os.getenv('SPOTIFY_REDIRECT_URI') or 'http://localhost:8888/callback').strip()
 playlist_id = (os.getenv('SPOTIFY_PLAYLIST_ID') or '0hZMtCh7Plo8MbVX0r1PhE').strip()
 
 
@@ -36,6 +36,8 @@ def _build_playlist_client():
                 client_secret=client_secret,
                 redirect_uri=redirect_uri,
                 scope='playlist-modify-public playlist-modify-private',
+                cache_path='.spotify_cache',
+                open_browser=False,
             )
         )
     except Exception:
