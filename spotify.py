@@ -8,7 +8,7 @@ load_dotenv(dotenv_path='secrets.env')
 
 client_id = (os.getenv('SPOTIFY_CLIENT_ID') or '').strip()
 client_secret = (os.getenv('SPOTIFY_CLIENT_SECRET') or '').strip()
-redirect_uri = (os.getenv('SPOTIFY_REDIRECT_URI') or 'http://localhost:8888/callback').strip()
+redirect_uri = (os.getenv('SPOTIFY_REDIRECT_URI') or 'https://guessthedj.onrender.com/callback').strip()
 playlist_id = (os.getenv('SPOTIFY_PLAYLIST_ID') or '0hZMtCh7Plo8MbVX0r1PhE').strip()
 
 
