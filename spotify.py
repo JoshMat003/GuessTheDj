@@ -4,7 +4,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 load_dotenv()
-load_dotenv(dotenv_path='secrets.env')
+load_dotenv(dotenv_path='Secrets.env')
 
 client_id = (os.getenv('SPOTIFY_CLIENT_ID') or '').strip()
 client_secret = (os.getenv('SPOTIFY_CLIENT_SECRET') or '').strip()
