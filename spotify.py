@@ -12,16 +12,47 @@ redirect_uri = (os.getenv('SPOTIFY_REDIRECT_URI') or 'https://guessthedj.onrende
 playlist_id = (os.getenv('SPOTIFY_PLAYLIST_ID') or '0hZMtCh7Plo8MbVX0r1PhE').strip()
 
 
+def _spotify_from_auth(auth_obj):
+    """Build a Spotipy client from either an auth manager object or a token string."""
+    if auth_obj is None:
+        return None
+
+    # Preferred path: real auth manager (SpotifyOAuth / SpotifyClientCredentials).
+    if hasattr(auth_obj, 'validate_token'):
+        return spotipy.Spotify(auth_manager=auth_obj)
+
+    # Fallback path: token string.
+    if isinstance(auth_obj, str):
+        token = auth_obj.strip()
+        return spotipy.Spotify(auth=token) if token else None
+
+    # Fallback path: manager-like object that can return token info.
+    get_access_token = getattr(auth_obj, 'get_access_token', None)
+    if callable(get_access_token):
+        try:
+            token_info = get_access_token(as_dict=True)
+        except TypeError:
+            token_info = get_access_token()
+
+        if isinstance(token_info, dict):
+            token = (token_info.get('access_token') or '').strip()
+        else:
+            token = (token_info or '').strip()
+
+        return spotipy.Spotify(auth=token) if token else None
+
+    return None
+
+
 def _build_search_client():
     if not client_id or not client_secret:
         return None
     try:
-        return spotipy.Spotify(
-            auth_manager=SpotifyClientCredentials(
-                client_id=client_id,
-                client_secret=client_secret,
-            )
+        auth_obj = SpotifyClientCredentials(
+            client_id=client_id,
+            client_secret=client_secret,
         )
+        return _spotify_from_auth(auth_obj)
     except Exception:
         return None
 
@@ -30,16 +61,15 @@ def _build_playlist_client():
     if not client_id or not client_secret:
         return None
     try:
-        return spotipy.Spotify(
-            auth_manager=SpotifyOAuth(
-                client_id=client_id,
-                client_secret=client_secret,
-                redirect_uri=redirect_uri,
-                scope='playlist-modify-public playlist-modify-private',
-                cache_path='.spotify_cache',
-                open_browser=False,
-            )
+        auth_obj = SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope='playlist-modify-public playlist-modify-private',
+            cache_path='.spotify_cache',
+            open_browser=False,
         )
+        return _spotify_from_auth(auth_obj)
     except Exception:
         return None
 
